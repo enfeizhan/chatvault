@@ -125,7 +125,7 @@ def create_router(
         user_id: str = Depends(user_id_dep),
     ):
         """Create a new conversation."""
-        metadata = data.metadata if data else {}
+        metadata = (data.metadata if data and data.metadata else {}) or {}
         session = vault.create_session(user_id=user_id, **metadata)
         
         if data and data.title:
