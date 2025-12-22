@@ -7,6 +7,7 @@ Creates a chat UI that uses ChatVault for persistence.
 from typing import Callable, Awaitable, Optional
 import logging
 import os
+import sys
 import warnings
 
 from fastapi import FastAPI
@@ -49,9 +50,15 @@ def mount_chatvault_ui(
     """
     from chainlit.utils import mount_chainlit
     
-    # Configure the chainlit app with our dependencies
-    from chatvault.ui.chatvault_app import configure
+    # Configure via the shared config module
+    # Import and configure BEFORE mounting so it's in sys.modules
+    from chatvault.ui.config import configure
     configure(vault, message_handler, get_user_id, title)
+    
+    # Verify config is set
+    from chatvault.ui.config import get_config
+    config = get_config()
+    logger.info(f"Config set: vault={config['vault'] is not None}, handler={config['message_handler'] is not None}")
     
     # Get the path to the chatvault_app.py file
     chatvault_app_path = os.path.join(
@@ -103,7 +110,7 @@ def create_chatvault_app(
     )
     
     # Configure the chainlit app
-    from chatvault.ui.chatvault_app import configure
+    from chatvault.ui.config import configure
     configure(vault, message_handler, get_user_id, title)
     
     # Return the Chainlit FastAPI app (may not work at non-root paths)

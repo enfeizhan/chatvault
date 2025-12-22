@@ -2,49 +2,51 @@
 ChatVault Chainlit App - Standalone Chainlit app file for mount_chainlit.
 
 This file is used by mount_chainlit to properly mount the Chainlit UI.
-It retrieves configuration from the _chatvault_config registry.
+It retrieves configuration from the shared config module.
 """
 
 import chainlit as cl
 import logging
-
-from chatvault.session import Message
+import sys
 
 logger = logging.getLogger(__name__)
 
-# Global registry for ChatVault configuration
-# Set by mount_chatvault_ui() before mounting
-_chatvault_config = {
-    "vault": None,
-    "message_handler": None,
-    "get_user_id": None,
-    "title": "ChatVault Assistant"
-}
 
-
-def configure(vault, message_handler, get_user_id=None, title="ChatVault Assistant"):
-    """Configure the ChatVault app with required dependencies.
+def _get_config():
+    """Get config from the shared module, handling various import scenarios."""
+    # Try multiple import paths to find the already-configured module
+    for module_name in ['chatvault.ui.config', 'config']:
+        if module_name in sys.modules:
+            config_module = sys.modules[module_name]
+            if hasattr(config_module, 'get_config'):
+                return config_module.get_config()
     
-    Called by mount_chatvault_ui() before mounting.
-    """
-    _chatvault_config["vault"] = vault
-    _chatvault_config["message_handler"] = message_handler
-    _chatvault_config["get_user_id"] = get_user_id
-    _chatvault_config["title"] = title
+    # Fallback: direct import
+    try:
+        from chatvault.ui.config import get_config
+        return get_config()
+    except ImportError:
+        pass
+    
+    return {"vault": None, "message_handler": None, "get_user_id": None, "title": "ChatVault Assistant"}
 
 
 @cl.on_chat_start
 async def on_chat_start():
     """Initialize session when chat starts."""
-    vault = _chatvault_config["vault"]
-    message_handler = _chatvault_config["message_handler"]
-    get_user_id = _chatvault_config["get_user_id"]
+    config = _get_config()
+    vault = config.get("vault")
+    message_handler = config.get("message_handler")
+    get_user_id = config.get("get_user_id")
+    
+    logger.info(f"on_chat_start: vault={vault is not None}, handler={message_handler is not None}")
     
     if not vault or not message_handler:
         await cl.Message(
             content="❌ ChatVault not configured. Please check server logs.",
             author="system"
         ).send()
+        logger.error("ChatVault config missing: vault or message_handler is None")
         return
     
     # Get or create session ID
@@ -56,8 +58,8 @@ async def on_chat_start():
         if get_user_id:
             try:
                 user_id = await get_user_id()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to get user_id: {e}")
         
         # Create new ChatVault session
         session = vault.create_session(user_id=user_id)
@@ -81,11 +83,14 @@ async def on_chat_start():
 @cl.on_message
 async def on_message(message: cl.Message):
     """Handle incoming user messages."""
+    from chatvault.session import Message
+    
     vault_instance = cl.user_session.get("vault")
     handler = cl.user_session.get("message_handler")
     session_id = cl.user_session.get("session_id")
     
     if not all([vault_instance, handler, session_id]):
+        logger.error(f"Session error: vault={vault_instance is not None}, handler={handler is not None}, session_id={session_id}")
         await cl.Message(content="Session error. Please refresh.").send()
         return
     
