@@ -112,11 +112,8 @@ async def on_message(message: cl.Message):
         # Call the AI handler
         response = await handler(message.content, session)
         
-        # Add assistant response to session
+        # Add assistant response to session (auto-saves)
         session.add_message("assistant", response)
-        
-        # Save session
-        vault_instance.save_session(session)
         
         # Update the message with response
         msg.content = response
