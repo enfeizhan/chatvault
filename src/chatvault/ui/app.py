@@ -4,15 +4,65 @@ ChatVault UI Application.
 Creates a chat UI that uses ChatVault for persistence.
 """
 
-from typing import Callable, Awaitable, Optional, Any
+from typing import Callable, Awaitable, Optional
 import logging
-import chainlit as cl
+import os
+import warnings
+
 from fastapi import FastAPI
 
 from chatvault import ChatVault
-from chatvault.session import Session, Message
+from chatvault.session import Session
 
 logger = logging.getLogger(__name__)
+
+
+def mount_chatvault_ui(
+    app: FastAPI,
+    vault: ChatVault,
+    message_handler: Callable[[str, Session], Awaitable[str]],
+    path: str = "/chat",
+    get_user_id: Optional[Callable[[], Awaitable[Optional[str]]]] = None,
+    title: str = "ChatVault Assistant",
+) -> None:
+    """
+    Mount ChatVault chat UI on a FastAPI app at the specified path.
+    
+    This function properly handles Chainlit's path routing by using
+    mount_chainlit internally.
+    
+    Args:
+        app: Parent FastAPI application
+        vault: ChatVault instance for persistence
+        message_handler: Async function that takes (user_message, session) and returns AI response
+        path: URL path to mount the chat UI (default: "/chat")
+        get_user_id: Optional async function to get current user ID (for auth integration)
+        title: Chat window title
+        
+    Example:
+        from chatvault.ui import mount_chatvault_ui
+        
+        async def my_ai_handler(message: str, session: Session) -> str:
+            return await my_llm.chat(message)
+            
+        mount_chatvault_ui(app, vault, my_ai_handler, path="/chat")
+    """
+    from chainlit.utils import mount_chainlit
+    
+    # Configure the chainlit app with our dependencies
+    from chatvault.ui.chatvault_app import configure
+    configure(vault, message_handler, get_user_id, title)
+    
+    # Get the path to the chatvault_app.py file
+    chatvault_app_path = os.path.join(
+        os.path.dirname(__file__), 
+        "chatvault_app.py"
+    )
+    
+    # Mount using Chainlit's utility which handles path routing correctly
+    mount_chainlit(app=app, target=chatvault_app_path, path=path)
+    
+    logger.info(f"ChatVault UI mounted at {path}")
 
 
 def create_chatvault_app(
@@ -23,6 +73,11 @@ def create_chatvault_app(
 ) -> FastAPI:
     """
     Create a ChatVault chat UI application.
+    
+    .. deprecated::
+        Use `mount_chatvault_ui()` instead for proper path handling.
+        This function returns a FastAPI app that may not work correctly
+        when mounted at non-root paths.
     
     Args:
         vault: ChatVault instance for persistence
@@ -40,92 +95,17 @@ def create_chatvault_app(
         chat_app = create_chatvault_app(vault, my_ai_handler)
         app.mount("/chat", chat_app)
     """
+    warnings.warn(
+        "create_chatvault_app() is deprecated and may not work correctly when "
+        "mounted at non-root paths. Use mount_chatvault_ui() instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     
-    # Store config in user session for access in handlers
-    @cl.on_chat_start
-    async def on_chat_start():
-        """Initialize session when chat starts."""
-        # Get or create session ID
-        session_id = cl.user_session.get("session_id")
-        
-        if not session_id:
-            # Try to get user ID for session linking
-            user_id = None
-            if get_user_id:
-                try:
-                    user_id = await get_user_id()
-                except Exception:
-                    pass
-            
-            # Create new ChatVault session
-            session = vault.create_session(user_id=user_id)
-            session_id = session.session_id
-            cl.user_session.set("session_id", session_id)
-            logger.info(f"Created new session: {session_id}")
-        else:
-            logger.info(f"Resuming session: {session_id}")
-        
-        # Store references
-        cl.user_session.set("vault", vault)
-        cl.user_session.set("message_handler", message_handler)
-        
-        # Send welcome message
-        await cl.Message(
-            content=f"👋 Welcome! I'm ready to help.",
-            author="assistant"
-        ).send()
+    # Configure the chainlit app
+    from chatvault.ui.chatvault_app import configure
+    configure(vault, message_handler, get_user_id, title)
     
-    @cl.on_message
-    async def on_message(message: cl.Message):
-        """Handle incoming user messages."""
-        vault_instance: ChatVault = cl.user_session.get("vault")
-        handler = cl.user_session.get("message_handler")
-        session_id = cl.user_session.get("session_id")
-        
-        if not all([vault_instance, handler, session_id]):
-            await cl.Message(content="Session error. Please refresh.").send()
-            return
-        
-        # Get session
-        session = vault_instance.get_session(session_id)
-        if not session:
-            session = vault_instance.create_session()
-            session_id = session.session_id
-            cl.user_session.set("session_id", session_id)
-        
-        # Add user message to session
-        session.add_message(Message(role="user", content=message.content))
-        
-        # Show thinking indicator
-        msg = cl.Message(content="")
-        await msg.send()
-        
-        try:
-            # Call the AI handler
-            response = await handler(message.content, session)
-            
-            # Add assistant response to session
-            session.add_message(Message(role="assistant", content=response))
-            
-            # Save session
-            vault_instance.save_session(session)
-            
-            # Update the message with response
-            msg.content = response
-            await msg.update()
-            
-        except Exception as e:
-            logger.error(f"Error handling message: {e}")
-            msg.content = f"Sorry, an error occurred: {str(e)}"
-            await msg.update()
-    
-    @cl.on_chat_end
-    async def on_chat_end():
-        """Clean up when chat ends."""
-        session_id = cl.user_session.get("session_id")
-        if session_id:
-            logger.info(f"Chat ended for session: {session_id}")
-    
-    # Return the Chainlit FastAPI app
+    # Return the Chainlit FastAPI app (may not work at non-root paths)
     from chainlit.server import app as chainlit_fastapi_app
     return chainlit_fastapi_app
