@@ -1,7 +1,7 @@
 """
-ChatVault Chainlit Application.
+ChatVault UI Application.
 
-Creates a Chainlit-based chat UI that uses ChatVault for persistence.
+Creates a chat UI that uses ChatVault for persistence.
 """
 
 from typing import Callable, Awaitable, Optional, Any
@@ -15,14 +15,14 @@ from chatvault.session import Session, Message
 logger = logging.getLogger(__name__)
 
 
-def create_chainlit_app(
+def create_chatvault_app(
     vault: ChatVault,
     message_handler: Callable[[str, Session], Awaitable[str]],
     get_user_id: Optional[Callable[[], Awaitable[Optional[str]]]] = None,
     title: str = "ChatVault Assistant",
 ) -> FastAPI:
     """
-    Create a Chainlit FastAPI app wired to ChatVault.
+    Create a ChatVault chat UI application.
     
     Args:
         vault: ChatVault instance for persistence
@@ -37,8 +37,8 @@ def create_chainlit_app(
         async def my_ai_handler(message: str, session: Session) -> str:
             return await my_llm.chat(message)
             
-        chainlit_app = create_chainlit_app(vault, my_ai_handler)
-        app.mount("/chat", chainlit_app)
+        chat_app = create_chatvault_app(vault, my_ai_handler)
+        app.mount("/chat", chat_app)
     """
     
     # Store config in user session for access in handlers

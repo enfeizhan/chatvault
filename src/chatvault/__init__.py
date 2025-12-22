@@ -20,14 +20,14 @@ For FastAPI integration:
     from chatvault.api import create_router
     app.include_router(create_router(vault), prefix="/api")
 
-For Chainlit UI (requires chatvault[ui]):
-    from chatvault.ui import create_chainlit_app
+For ChatVault UI (requires chatvault[ui]):
+    from chatvault.ui import create_chatvault_app
     
     async def ai_handler(message, session):
         return await my_llm.chat(message)
     
-    chainlit_app = create_chainlit_app(vault, ai_handler)
-    app.mount("/chat", chainlit_app)
+    chat_app = create_chatvault_app(vault, ai_handler)
+    app.mount("/chat", chat_app)
 """
 
 from chatvault.vault import ChatVault
