@@ -102,7 +102,7 @@ async def on_message(message: cl.Message):
         cl.user_session.set("session_id", session_id)
     
     # Add user message to session
-    session.add_message(Message(role="user", content=message.content))
+    session.add_message("user", message.content)
     
     # Show thinking indicator
     msg = cl.Message(content="")
@@ -113,7 +113,7 @@ async def on_message(message: cl.Message):
         response = await handler(message.content, session)
         
         # Add assistant response to session
-        session.add_message(Message(role="assistant", content=response))
+        session.add_message("assistant", response)
         
         # Save session
         vault_instance.save_session(session)
