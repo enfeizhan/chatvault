@@ -31,6 +31,18 @@ def _get_config():
     return {"vault": None, "message_handler": None, "get_user_id": None, "title": "ChatVault Assistant"}
 
 
+# Register the data layer for conversation history persistence
+@cl.data_layer
+def get_data_layer():
+    """Provide the ChatVault data layer for Chainlit."""
+    from chatvault.ui.data_layer import ChatVaultDataLayer
+    config = _get_config()
+    vault = config.get("vault")
+    if vault:
+        return ChatVaultDataLayer(vault)
+    return None
+
+
 @cl.on_chat_start
 async def on_chat_start():
     """Initialize session when chat starts."""
@@ -49,8 +61,9 @@ async def on_chat_start():
         logger.error("ChatVault config missing: vault or message_handler is None")
         return
     
-    # Get or create session ID
-    session_id = cl.user_session.get("session_id")
+    # Get or create session ID - use Chainlit's thread_id if available
+    thread_id = cl.context.session.thread_id if cl.context.session else None
+    session_id = thread_id or cl.user_session.get("session_id")
     
     if not session_id:
         # Try to get user ID for session linking
@@ -67,11 +80,36 @@ async def on_chat_start():
         cl.user_session.set("session_id", session_id)
         logger.info(f"Created new session: {session_id}")
     else:
-        logger.info(f"Resuming session: {session_id}")
+        cl.user_session.set("session_id", session_id)
+        logger.info(f"Using session: {session_id}")
     
     # Store references in user session
     cl.user_session.set("vault", vault)
     cl.user_session.set("message_handler", message_handler)
+    
+    # Get session and display attached files
+    session = vault.get_session(session_id)
+    if session:
+        files = session.get_files()
+        if files:
+            # Create file elements for the sidebar
+            elements = []
+            for file in files:
+                try:
+                    file_element = cl.File(
+                        name=file.filename,
+                        display="side",
+                        mime=file.content_type,
+                    )
+                    elements.append(file_element)
+                except Exception as e:
+                    logger.warning(f"Failed to create file element: {e}")
+            
+            if elements:
+                await cl.Message(
+                    content=f"📎 {len(files)} file(s) attached to this conversation",
+                    elements=elements
+                ).send()
     
     # Send welcome message
     await cl.Message(
@@ -83,8 +121,6 @@ async def on_chat_start():
 @cl.on_message
 async def on_message(message: cl.Message):
     """Handle incoming user messages."""
-    from chatvault.session import Message
-    
     vault_instance = cl.user_session.get("vault")
     handler = cl.user_session.get("message_handler")
     session_id = cl.user_session.get("session_id")
