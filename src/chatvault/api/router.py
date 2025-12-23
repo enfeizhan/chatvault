@@ -100,24 +100,44 @@ def create_router(
     
     user_id_dep = get_user_id or default_get_user_id
     
-    @router.get("", response_model=list[ConversationSummary])
-    async def list_conversations(user_id: str = Depends(user_id_dep)):
-        """List all conversations for the current user."""
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Authentication required")
+    @router.get("")
+    async def list_conversations(
+        user_id: str = Depends(user_id_dep),
+        session_id: Optional[str] = None,  # Allow passing session_id as query param
+    ):
+        """
+        List conversations for the current user.
         
-        sessions = vault.get_user_sessions(user_id)
-        return [
-            ConversationSummary(
-                session_id=s.session_id,
-                title=s.title or "New Conversation",
-                created_at=s.created_at,
-                last_active=s.last_active,
-                message_count=len(s._messages),
-                file_count=len(s._files),
-            )
-            for s in sessions
-        ]
+        For authenticated users: returns all their conversations.
+        For anonymous users: returns empty list (they should pass session_id as query param).
+        
+        The frontend can pass ?session_id=xxx for anonymous session lookup.
+        """
+        sessions = []
+        
+        if user_id:
+            # Authenticated user - get all their sessions
+            sessions = vault.get_user_sessions(user_id)
+        elif session_id:
+            # Anonymous user with session_id - get that specific session
+            session = vault.get_session(session_id)
+            if session:
+                sessions = [session]
+        
+        # Return formatted response (compatible with frontend expecting 'conversations' key)
+        return {
+            "conversations": [
+                {
+                    "session_id": s.session_id,
+                    "title": s.title or "新对话",
+                    "created_at": s.created_at.isoformat(),
+                    "last_active": s.last_active.isoformat(),
+                    "message_count": len(s._messages),
+                    "document_count": len(s._files),
+                }
+                for s in sessions
+            ]
+        }
     
     @router.post("", response_model=ConversationDetail)
     async def create_conversation(
