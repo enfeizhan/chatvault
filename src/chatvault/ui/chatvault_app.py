@@ -31,6 +31,34 @@ def _get_config():
     return {"vault": None, "message_handler": None, "get_user_id": None, "title": "ChatVault Assistant"}
 
 
+# Header-based authentication callback for integration with parent app's auth
+@cl.header_auth_callback
+def auth_header_callback(headers: dict) -> cl.User:
+    """
+    Authenticate user based on headers from the parent FastAPI app.
+    
+    This enables conversation history sidebar by providing user identity.
+    If no auth header, creates an anonymous user.
+    """
+    # Look for auth headers from parent app
+    user_id = headers.get("X-User-Id") or headers.get("x-user-id")
+    
+    if not user_id:
+        # Check for authorization header (JWT etc)
+        auth_header = headers.get("Authorization") or headers.get("authorization")
+        if auth_header:
+            # For now, use hash of auth header as user ID
+            user_id = f"user-{hash(auth_header) % 100000}"
+    
+    if not user_id:
+        # Create anonymous user with a session-based ID
+        import uuid
+        user_id = f"anonymous-{uuid.uuid4().hex[:8]}"
+    
+    logger.info(f"Authenticated user: {user_id}")
+    return cl.User(identifier=user_id, metadata={"source": "header_auth"})
+
+
 # Register the data layer for conversation history persistence
 @cl.data_layer
 def get_data_layer():
@@ -65,16 +93,13 @@ async def on_chat_start():
     thread_id = cl.context.session.thread_id if cl.context.session else None
     session_id = thread_id or cl.user_session.get("session_id")
     
+    # Get user ID from Chainlit's authenticated user
+    user = cl.user_session.get("user")
+    user_id = user.identifier if user else None
+    logger.info(f"User: {user_id}, Thread: {thread_id}")
+    
     if not session_id:
-        # Try to get user ID for session linking
-        user_id = None
-        if get_user_id:
-            try:
-                user_id = await get_user_id()
-            except Exception as e:
-                logger.warning(f"Failed to get user_id: {e}")
-        
-        # Create new ChatVault session
+        # Create new ChatVault session linked to user
         session = vault.create_session(user_id=user_id)
         session_id = session.session_id
         cl.user_session.set("session_id", session_id)
