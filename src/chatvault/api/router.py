@@ -109,20 +109,29 @@ def create_router(
         List conversations for the current user.
         
         For authenticated users: returns all their conversations.
-        For anonymous users: returns empty list (they should pass session_id as query param).
+        For anonymous users: returns the current session if session_id is provided.
         
-        The frontend can pass ?session_id=xxx for anonymous session lookup.
+        Always includes the current session_id if provided.
         """
         sessions = []
+        session_ids_seen = set()
         
+        # If user is authenticated, get all their sessions
         if user_id:
-            # Authenticated user - get all their sessions
-            sessions = vault.get_user_sessions(user_id)
-        elif session_id:
-            # Anonymous user with session_id - get that specific session
+            user_sessions = vault.get_user_sessions(user_id)
+            for s in user_sessions:
+                sessions.append(s)
+                session_ids_seen.add(s.session_id)
+        
+        # Always try to get the current session_id if provided (even for logged-in users)
+        # This ensures the current session is always visible
+        if session_id and session_id not in session_ids_seen:
             session = vault.get_session(session_id)
             if session:
-                sessions = [session]
+                sessions.insert(0, session)  # Put current session first
+        
+        # Sort by last_active (most recent first)
+        sessions.sort(key=lambda s: s.last_active, reverse=True)
         
         # Return formatted response (compatible with frontend expecting 'conversations' key)
         return {
