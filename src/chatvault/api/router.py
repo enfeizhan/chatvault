@@ -347,6 +347,40 @@ def create_router(
         
         return {"download_url": url, "expires_in": expires_in}
     
+    @router.delete("/{session_id}/files/{filename}")
+    async def delete_file(
+        session_id: str,
+        filename: str,
+        user_id: str = Depends(user_id_dep),
+    ):
+        """Delete a file from a conversation."""
+        session = vault.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        # Check ownership - only owner can delete files
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        if session.user_id and session.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Find and remove the file
+        original_count = len(session._files)
+        session._files = [f for f in session._files if f.filename != filename]
+        
+        if len(session._files) == original_count:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Delete from storage if storage backend supports it
+        if hasattr(session, '_storage') and session._storage:
+            try:
+                session._storage.delete(f"{session_id}/{filename}")
+            except Exception:
+                pass  # Storage deletion is best-effort
+        
+        session._save()
+        return {"success": True, "message": "File deleted"}
+    
     # Auto-create conversation on first message (convenience endpoint)
     @router.post("/chat")
     async def chat(
