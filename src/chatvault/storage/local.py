@@ -69,7 +69,12 @@ class LocalStorage(StorageBackend):
         """Check if a file exists."""
         return self._get_full_path(key).exists()
     
-    def get_signed_url(self, key: str, expires_in: int = 3600) -> Optional[str]:
+    def get_signed_url(
+        self, 
+        key: str, 
+        expires_in: int = 3600,
+        download_filename: Optional[str] = None,
+    ) -> Optional[str]:
         """
         For local storage, return a file:// URL.
         

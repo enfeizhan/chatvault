@@ -137,8 +137,11 @@ class Session:
         if not self._vault:
             raise RuntimeError("Session not connected to a vault")
         
-        # Generate storage key
-        storage_key = f"{self.session_id}/{filename}"
+        # Generate storage key: user_id/session_id/filename (or session_id/filename if no user)
+        if self.user_id:
+            storage_key = f"{self.user_id}/{self.session_id}/{filename}"
+        else:
+            storage_key = f"{self.session_id}/{filename}"
         
         # Upload to storage
         self._vault._storage.put(storage_key, content, content_type)
@@ -166,7 +169,12 @@ class Session:
         
         for f in self._files:
             if f.filename == filename:
-                return self._vault._storage.get_signed_url(f.storage_key, expires_in)
+                # Pass download_filename to force download with original filename
+                return self._vault._storage.get_signed_url(
+                    f.storage_key, 
+                    expires_in, 
+                    download_filename=f.filename
+                )
         return None
     
     def get_file_content(self, filename: str) -> Optional[bytes]:

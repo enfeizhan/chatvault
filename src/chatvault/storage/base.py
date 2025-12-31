@@ -66,13 +66,20 @@ class StorageBackend(ABC):
         """
         pass
     
-    def get_signed_url(self, key: str, expires_in: int = 3600) -> Optional[str]:
+    def get_signed_url(
+        self, 
+        key: str, 
+        expires_in: int = 3600,
+        download_filename: Optional[str] = None,
+    ) -> Optional[str]:
         """
         Generate a signed URL for downloading a file.
         
         Args:
             key: Storage key
             expires_in: URL expiration time in seconds (default: 1 hour)
+            download_filename: If provided, forces the browser to download with this filename
+                               instead of opening in browser (adds Content-Disposition header)
             
         Returns:
             Signed URL string, or None if not supported
