@@ -364,20 +364,26 @@ def create_router(
         if session.user_id and session.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        # Find and remove the file
-        original_count = len(session._files)
-        session._files = [f for f in session._files if f.filename != filename]
+        # Find the file to get its storage_key
+        file_to_delete = None
+        for f in session._files:
+            if f.filename == filename:
+                file_to_delete = f
+                break
         
-        if len(session._files) == original_count:
+        if not file_to_delete:
             raise HTTPException(status_code=404, detail="File not found")
         
-        # Delete from storage if storage backend supports it
-        if hasattr(session, '_storage') and session._storage:
+        # Delete from storage backend
+        if session._vault and session._vault._storage:
             try:
-                session._storage.delete(f"{session_id}/{filename}")
-            except Exception:
-                pass  # Storage deletion is best-effort
+                session._vault._storage.delete(file_to_delete.storage_key)
+            except Exception as e:
+                # Log but continue - metadata cleanup is more important
+                pass
         
+        # Remove from session metadata
+        session._files = [f for f in session._files if f.filename != filename]
         session._save()
         return {"success": True, "message": "File deleted"}
     
