@@ -1,7 +1,7 @@
 """
-Session model for ChatVault.
+Conversation model for ChatVault.
 
-A session represents a single conversation with message history and file attachments.
+A conversation represents a single chat thread with message history and file attachments.
 """
 
 from dataclasses import dataclass, field
@@ -70,17 +70,17 @@ class FileAttachment:
         )
 
 
-class Session:
+class Conversation:
     """
-    A conversation session with messages and file attachments.
+    A conversation with messages and file attachments.
     
-    This class is typically created via ChatVault.create_session() or
-    ChatVault.get_session(), not instantiated directly.
+    This class is typically created via ChatVault.create_conversation() or
+    ChatVault.get_conversation(), not instantiated directly.
     """
     
     def __init__(
         self,
-        session_id: str,
+        conversation_id: str,
         user_id: Optional[str] = None,
         title: Optional[str] = None,
         created_at: Optional[datetime] = None,
@@ -90,7 +90,7 @@ class Session:
         # Internal references (set by ChatVault)
         _vault: Optional[Any] = None,
     ):
-        self.session_id = session_id
+        self.conversation_id = conversation_id
         self.user_id = user_id
         self.title = title or ""
         self.created_at = created_at or datetime.now()
@@ -101,10 +101,10 @@ class Session:
         self._vault = _vault
     
     @classmethod
-    def new(cls, user_id: Optional[str] = None, **kwargs) -> "Session":
-        """Create a new session with a generated ID."""
+    def new(cls, user_id: Optional[str] = None, **kwargs) -> "Conversation":
+        """Create a new conversation with a generated ID."""
         return cls(
-            session_id=str(uuid4()),
+            conversation_id=str(uuid4()),
             user_id=user_id,
             **kwargs,
         )
@@ -135,16 +135,16 @@ class Session:
     ) -> FileAttachment:
         """Attach a file to the conversation."""
         if not self._vault:
-            raise RuntimeError("Session not connected to a vault")
+            raise RuntimeError("Conversation not connected to a vault")
         
-        # Generate storage key: user_id/session_id/filename (or session_id/filename if no user)
+        # Generate storage key: user_id/conversation_id/filename (or conversation_id/filename if no user)
         if self.user_id:
-            storage_key = f"{self.user_id}/{self.session_id}/{filename}"
+            storage_key = f"{self.user_id}/{self.conversation_id}/{filename}"
         else:
-            storage_key = f"{self.session_id}/{filename}"
+            storage_key = f"{self.conversation_id}/{filename}"
         
-        # Upload to storage
-        self._vault._storage.put(storage_key, content, content_type)
+        # Upload to files backend
+        self._vault._files.upload(storage_key, content, content_type)
         
         # Create attachment record
         attachment = FileAttachment(
@@ -165,12 +165,12 @@ class Session:
     def get_file_url(self, filename: str, expires_in: int = 3600) -> Optional[str]:
         """Get a signed URL for downloading a file."""
         if not self._vault:
-            raise RuntimeError("Session not connected to a vault")
+            raise RuntimeError("Conversation not connected to a vault")
         
         for f in self._files:
             if f.filename == filename:
                 # Pass download_filename to force download with original filename
-                return self._vault._storage.get_signed_url(
+                return self._vault._files.get_signed_url(
                     f.storage_key, 
                     expires_in, 
                     download_filename=f.filename
@@ -180,15 +180,15 @@ class Session:
     def get_file_content(self, filename: str) -> Optional[bytes]:
         """Download file content directly."""
         if not self._vault:
-            raise RuntimeError("Session not connected to a vault")
+            raise RuntimeError("Conversation not connected to a vault")
         
         for f in self._files:
             if f.filename == filename:
-                return self._vault._storage.get(f.storage_key)
+                return self._vault._files.download(f.storage_key)
         return None
     
     def rename(self, title: str) -> None:
-        """Rename the session."""
+        """Rename the conversation."""
         self.title = title
         self._save()
     
@@ -202,14 +202,14 @@ class Session:
                     break
     
     def _save(self) -> None:
-        """Persist session to storage."""
+        """Persist conversation to storage."""
         if self._vault:
-            self._vault._persistence.save_session(self)
+            self._vault._messages.save(self)
     
     def to_dict(self) -> dict:
-        """Serialize session to dictionary."""
+        """Serialize conversation to dictionary."""
         return {
-            "session_id": self.session_id,
+            "conversation_id": self.conversation_id,
             "user_id": self.user_id,
             "title": self.title,
             "created_at": self.created_at.isoformat(),
@@ -220,10 +220,10 @@ class Session:
         }
     
     @classmethod
-    def from_dict(cls, data: dict, vault: Optional[Any] = None) -> "Session":
-        """Deserialize session from dictionary."""
+    def from_dict(cls, data: dict, vault: Optional[Any] = None) -> "Conversation":
+        """Deserialize conversation from dictionary."""
         return cls(
-            session_id=data["session_id"],
+            conversation_id=data["conversation_id"],
             user_id=data.get("user_id"),
             title=data.get("title", ""),
             created_at=datetime.fromisoformat(data["created_at"]),

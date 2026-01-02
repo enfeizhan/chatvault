@@ -4,35 +4,34 @@ ChatVault - AI Conversation & File Manager
 Vault your conversations. Unlock your context.
 
 Usage:
-    from chatvault import ChatVault
-    from chatvault.storage import LocalStorage
-    from chatvault.persistence import MemoryBackend
+    from chatvault import ChatVault, Conversation, Message, FileAttachment
+    from chatvault.backends import MemoryMessages, LocalFiles
     
     vault = ChatVault(
-        storage=LocalStorage(base_path="./uploads"),
-        persistence=MemoryBackend()
+        messages=MemoryMessages(),
+        files=LocalFiles(base_path="./uploads"),
     )
     
-    session = vault.create_session(user_id="user-123")
-    session.add_message("user", "Hello!")
+    conversation = vault.create_conversation(user_id="user-123")
+    conversation.add_message("user", "Hello!")
 
 For FastAPI integration:
-    from chatvault.api import create_router
+    from chatvault import create_router
     app.include_router(create_router(vault), prefix="/api")
 
-For ChatVault UI (requires chatvault[ui]):
-    from chatvault.ui import create_chatvault_app
-    
-    async def ai_handler(message, session):
-        return await my_llm.chat(message)
-    
-    chat_app = create_chatvault_app(vault, ai_handler)
-    app.mount("/chat", chat_app)
+Custom backends (implement the abstract base classes):
+    from chatvault.backends import MessagesBackend, FilesBackend
 """
 
 from chatvault.vault import ChatVault
-from chatvault.session import Session, Message, FileAttachment
+from chatvault.conversation import Conversation, Message, FileAttachment
+from chatvault.api import create_router
 
 __version__ = "0.1.0"
-__all__ = ["ChatVault", "Session", "Message", "FileAttachment"]
-
+__all__ = [
+    "ChatVault",
+    "Conversation",
+    "Message",
+    "FileAttachment",
+    "create_router",
+]

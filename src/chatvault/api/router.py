@@ -32,7 +32,7 @@ class MessageCreate(BaseModel):
 
 class ConversationSummary(BaseModel):
     """Summary of a conversation for list views."""
-    session_id: str
+    conversation_id: str
     title: str
     created_at: datetime
     last_active: datetime
@@ -42,7 +42,7 @@ class ConversationSummary(BaseModel):
 
 class ConversationDetail(BaseModel):
     """Full conversation details."""
-    session_id: str
+    conversation_id: str
     user_id: Optional[str]
     title: str
     created_at: datetime
@@ -77,7 +77,7 @@ def create_router(
         FastAPI APIRouter with all conversation endpoints
     
     Example:
-        vault = ChatVault(storage=..., persistence=...)
+        vault = ChatVault(messages=..., files=...)
         
         # Simple usage
         app.include_router(create_router(vault), prefix="/api")
@@ -103,48 +103,48 @@ def create_router(
     @router.get("")
     async def list_conversations(
         user_id: str = Depends(user_id_dep),
-        session_id: Optional[str] = None,  # Allow passing session_id as query param
+        conversation_id: Optional[str] = None,  # Allow passing conversation_id as query param
     ):
         """
         List conversations for the current user.
         
         For authenticated users: returns all their conversations.
-        For anonymous users: returns the current session if session_id is provided.
+        For anonymous users: returns the current conversation if conversation_id is provided.
         
-        Always includes the current session_id if provided.
+        Always includes the current conversation_id if provided.
         """
-        sessions = []
-        session_ids_seen = set()
+        conversations = []
+        conversation_ids_seen = set()
         
-        # If user is authenticated, get all their sessions
+        # If user is authenticated, get all their conversations
         if user_id:
-            user_sessions = vault.get_user_sessions(user_id)
-            for s in user_sessions:
-                sessions.append(s)
-                session_ids_seen.add(s.session_id)
+            user_conversations = vault.get_user_conversations(user_id)
+            for s in user_conversations:
+                conversations.append(s)
+                conversation_ids_seen.add(s.conversation_id)
         
-        # Always try to get the current session_id if provided (even for logged-in users)
-        # This ensures the current session is always visible
-        if session_id and session_id not in session_ids_seen:
-            session = vault.get_session(session_id)
-            if session:
-                sessions.insert(0, session)  # Put current session first
+        # Always try to get the current conversation_id if provided (even for logged-in users)
+        # This ensures the current conversation is always visible
+        if conversation_id and conversation_id not in conversation_ids_seen:
+            conversation = vault.get_conversation(conversation_id)
+            if conversation:
+                conversations.insert(0, conversation)  # Put current conversation first
         
         # Sort by last_active (most recent first)
-        sessions.sort(key=lambda s: s.last_active, reverse=True)
+        conversations.sort(key=lambda s: s.last_active, reverse=True)
         
         # Return formatted response (compatible with frontend expecting 'conversations' key)
         return {
             "conversations": [
                 {
-                    "session_id": s.session_id,
+                    "conversation_id": s.conversation_id,
                     "title": s.title or "新对话",
                     "created_at": s.created_at.isoformat(),
                     "last_active": s.last_active.isoformat(),
                     "message_count": len(s._messages),
                     "document_count": len(s._files),
                 }
-                for s in sessions
+                for s in conversations
             ]
         }
     
@@ -155,117 +155,117 @@ def create_router(
     ):
         """Create a new conversation."""
         metadata = (data.metadata if data and data.metadata else {}) or {}
-        session = vault.create_session(user_id=user_id, **metadata)
+        conversation = vault.create_conversation(user_id=user_id, **metadata)
         
         if data and data.title:
-            session.rename(data.title)
+            conversation.rename(data.title)
         
         return ConversationDetail(
-            session_id=session.session_id,
-            user_id=session.user_id,
-            title=session.title,
-            created_at=session.created_at,
-            last_active=session.last_active,
+            conversation_id=conversation.conversation_id,
+            user_id=conversation.user_id,
+            title=conversation.title,
+            created_at=conversation.created_at,
+            last_active=conversation.last_active,
             messages=[],
             files=[],
-            metadata=session.metadata,
+            metadata=conversation.metadata,
         )
     
-    @router.get("/{session_id}", response_model=ConversationDetail)
+    @router.get("/{conversation_id}", response_model=ConversationDetail)
     async def get_conversation(
-        session_id: str,
+        conversation_id: str,
         user_id: str = Depends(user_id_dep),
     ):
         """Get a conversation by ID."""
-        session = vault.get_session(session_id)
-        if not session:
+        conversation = vault.get_conversation(conversation_id)
+        if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         # Check ownership if user_id is available
-        if user_id and session.user_id and session.user_id != user_id:
+        if user_id and conversation.user_id and conversation.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
         return ConversationDetail(
-            session_id=session.session_id,
-            user_id=session.user_id,
-            title=session.title,
-            created_at=session.created_at,
-            last_active=session.last_active,
-            messages=[m.to_dict() for m in session._messages],
-            files=[f.to_dict() for f in session._files],
-            metadata=session.metadata,
+            conversation_id=conversation.conversation_id,
+            user_id=conversation.user_id,
+            title=conversation.title,
+            created_at=conversation.created_at,
+            last_active=conversation.last_active,
+            messages=[m.to_dict() for m in conversation._messages],
+            files=[f.to_dict() for f in conversation._files],
+            metadata=conversation.metadata,
         )
     
-    @router.patch("/{session_id}", response_model=ConversationDetail)
+    @router.patch("/{conversation_id}", response_model=ConversationDetail)
     async def update_conversation(
-        session_id: str,
+        conversation_id: str,
         data: ConversationUpdate,
         user_id: str = Depends(user_id_dep),
     ):
         """Update a conversation (rename, update metadata)."""
-        session = vault.get_session(session_id)
-        if not session:
+        conversation = vault.get_conversation(conversation_id)
+        if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         # Check ownership
-        if user_id and session.user_id and session.user_id != user_id:
+        if user_id and conversation.user_id and conversation.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
         if data.title is not None:
-            session.rename(data.title)
+            conversation.rename(data.title)
         
         if data.metadata is not None:
-            session.metadata.update(data.metadata)
-            session._save()
+            conversation.metadata.update(data.metadata)
+            conversation._save()
         
         return ConversationDetail(
-            session_id=session.session_id,
-            user_id=session.user_id,
-            title=session.title,
-            created_at=session.created_at,
-            last_active=session.last_active,
-            messages=[m.to_dict() for m in session._messages],
-            files=[f.to_dict() for f in session._files],
-            metadata=session.metadata,
+            conversation_id=conversation.conversation_id,
+            user_id=conversation.user_id,
+            title=conversation.title,
+            created_at=conversation.created_at,
+            last_active=conversation.last_active,
+            messages=[m.to_dict() for m in conversation._messages],
+            files=[f.to_dict() for f in conversation._files],
+            metadata=conversation.metadata,
         )
     
-    @router.delete("/{session_id}")
+    @router.delete("/{conversation_id}")
     async def delete_conversation(
-        session_id: str,
+        conversation_id: str,
         user_id: str = Depends(user_id_dep),
     ):
         """Delete a conversation and all its files."""
-        session = vault.get_session(session_id)
-        if not session:
+        conversation = vault.get_conversation(conversation_id)
+        if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         # Check ownership
-        if user_id and session.user_id and session.user_id != user_id:
+        if user_id and conversation.user_id and conversation.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        success = vault.delete_session(session_id)
+        success = vault.delete_conversation(conversation_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete conversation")
         
         return {"success": True, "message": "Conversation deleted"}
     
     # Message endpoints
-    @router.post("/{session_id}/messages", response_model=MessageResponse)
+    @router.post("/{conversation_id}/messages", response_model=MessageResponse)
     async def add_message(
-        session_id: str,
+        conversation_id: str,
         data: MessageCreate,
         user_id: str = Depends(user_id_dep),
     ):
         """Add a message to a conversation."""
-        session = vault.get_session(session_id)
-        if not session:
+        conversation = vault.get_conversation(conversation_id)
+        if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         # Check ownership
-        if user_id and session.user_id and session.user_id != user_id:
+        if user_id and conversation.user_id and conversation.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        message = session.add_message(
+        message = conversation.add_message(
             role=data.role,
             content=data.content,
             **(data.metadata or {})
@@ -278,23 +278,23 @@ def create_router(
         )
     
     # File endpoints
-    @router.post("/{session_id}/files")
+    @router.post("/{conversation_id}/files")
     async def upload_file(
-        session_id: str,
+        conversation_id: str,
         file: UploadFile = File(...),
         user_id: str = Depends(user_id_dep),
     ):
         """Upload a file to a conversation."""
-        session = vault.get_session(session_id)
-        if not session:
+        conversation = vault.get_conversation(conversation_id)
+        if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         # Check ownership
-        if user_id and session.user_id and session.user_id != user_id:
+        if user_id and conversation.user_id and conversation.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
         content = await file.read()
-        attachment = session.attach_file(
+        attachment = conversation.attach_file(
             filename=file.filename,
             content=content,
             content_type=file.content_type or "application/octet-stream",
@@ -307,66 +307,66 @@ def create_router(
             "uploaded_at": attachment.uploaded_at.isoformat(),
         }
     
-    @router.get("/{session_id}/files")
+    @router.get("/{conversation_id}/files")
     async def list_files(
-        session_id: str,
+        conversation_id: str,
         user_id: str = Depends(user_id_dep),
     ):
         """List all files in a conversation."""
-        session = vault.get_session(session_id)
-        if not session:
+        conversation = vault.get_conversation(conversation_id)
+        if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         # Check ownership
-        if user_id and session.user_id and session.user_id != user_id:
+        if user_id and conversation.user_id and conversation.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
         return {
-            "files": [f.to_dict() for f in session.get_files()]
+            "files": [f.to_dict() for f in conversation.get_files()]
         }
     
-    @router.get("/{session_id}/files/{filename}")
+    @router.get("/{conversation_id}/files/{filename}")
     async def get_file_url(
-        session_id: str,
+        conversation_id: str,
         filename: str,
         expires_in: int = 3600,
         user_id: str = Depends(user_id_dep),
     ):
         """Get a signed download URL for a file."""
-        session = vault.get_session(session_id)
-        if not session:
+        conversation = vault.get_conversation(conversation_id)
+        if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         # Check ownership
-        if user_id and session.user_id and session.user_id != user_id:
+        if user_id and conversation.user_id and conversation.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
-        url = session.get_file_url(filename, expires_in=expires_in)
+        url = conversation.get_file_url(filename, expires_in=expires_in)
         if not url:
             raise HTTPException(status_code=404, detail="File not found")
         
         return {"download_url": url, "expires_in": expires_in}
     
-    @router.delete("/{session_id}/files/{filename}")
+    @router.delete("/{conversation_id}/files/{filename}")
     async def delete_file(
-        session_id: str,
+        conversation_id: str,
         filename: str,
         user_id: str = Depends(user_id_dep),
     ):
         """Delete a file from a conversation."""
-        session = vault.get_session(session_id)
-        if not session:
+        conversation = vault.get_conversation(conversation_id)
+        if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
         
         # Check ownership - only owner can delete files
         if not user_id:
             raise HTTPException(status_code=401, detail="Authentication required")
-        if session.user_id and session.user_id != user_id:
+        if conversation.user_id and conversation.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Find the file to get its storage_key
         file_to_delete = None
-        for f in session._files:
+        for f in conversation._files:
             if f.filename == filename:
                 file_to_delete = f
                 break
@@ -375,23 +375,23 @@ def create_router(
             raise HTTPException(status_code=404, detail="File not found")
         
         # Delete from storage backend
-        if session._vault and session._vault._storage:
+        if conversation._vault and conversation._vault._files:
             try:
-                session._vault._storage.delete(file_to_delete.storage_key)
+                conversation._vault._files.delete(file_to_delete.storage_key)
             except Exception as e:
                 # Log but continue - metadata cleanup is more important
                 pass
         
-        # Remove from session metadata
-        session._files = [f for f in session._files if f.filename != filename]
-        session._save()
+        # Remove from conversation metadata
+        conversation._files = [f for f in conversation._files if f.filename != filename]
+        conversation._save()
         return {"success": True, "message": "File deleted"}
     
     # Auto-create conversation on first message (convenience endpoint)
     @router.post("/chat")
     async def chat(
         content: str = Form(...),
-        session_id: Optional[str] = Form(None),
+        conversation_id: Optional[str] = Form(None),
         files: list[UploadFile] = File(default=[]),
         user_id: str = Depends(user_id_dep),
     ):
@@ -399,29 +399,29 @@ def create_router(
         Send a message, auto-creating a conversation if needed.
         
         This is a convenience endpoint that combines:
-        1. Create conversation (if session_id not provided)
+        1. Create conversation (if conversation_id not provided)
         2. Upload files (if any)
         3. Add user message
         
-        Returns the session_id so the client can continue the conversation.
+        Returns the conversation_id so the client can continue the conversation.
         """
-        # Auto-create conversation if no session_id
-        if not session_id:
-            session = vault.create_session(user_id=user_id)
+        # Auto-create conversation if no conversation_id
+        if not conversation_id:
+            conversation = vault.create_conversation(user_id=user_id)
         else:
-            session = vault.get_session(session_id)
-            if not session:
+            conversation = vault.get_conversation(conversation_id)
+            if not conversation:
                 raise HTTPException(status_code=404, detail="Conversation not found")
             
             # Check ownership
-            if user_id and session.user_id and session.user_id != user_id:
+            if user_id and conversation.user_id and conversation.user_id != user_id:
                 raise HTTPException(status_code=403, detail="Access denied")
         
         # Upload files if any
         uploaded_files = []
         for file in files:
             file_content = await file.read()
-            attachment = session.attach_file(
+            attachment = conversation.attach_file(
                 filename=file.filename,
                 content=file_content,
                 content_type=file.content_type or "application/octet-stream",
@@ -432,18 +432,18 @@ def create_router(
             })
         
         # Add user message
-        message = session.add_message(role="user", content=content)
+        message = conversation.add_message(role="user", content=content)
         
         return {
-            "session_id": session.session_id,
-            "title": session.title,
+            "conversation_id": conversation.conversation_id,
+            "title": conversation.title,
             "message": {
                 "role": message.role,
                 "content": message.content,
                 "timestamp": message.timestamp.isoformat(),
             },
             "files": uploaded_files,
-            "is_new_conversation": session_id is None,
+            "is_new_conversation": conversation_id is None,
         }
     
     return router

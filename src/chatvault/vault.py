@@ -1,124 +1,124 @@
 """
 ChatVault - Main vault class.
 
-The ChatVault is the primary interface for managing sessions and files.
+The ChatVault is the primary interface for managing conversations and files.
 """
 
 from typing import Optional
-from chatvault.session import Session
-from chatvault.storage.base import StorageBackend
-from chatvault.persistence.base import PersistenceBackend
+from chatvault.conversation import Conversation
+from chatvault.backends.messages.base import MessagesBackend
+from chatvault.backends.files.base import FilesBackend
 
 
 class ChatVault:
     """
-    Main ChatVault class for managing AI conversation sessions.
+    Main ChatVault class for managing AI conversations.
     
     Example:
         vault = ChatVault(
-            storage=LocalStorage(base_path="./uploads"),
-            persistence=MemoryBackend()
+            messages=MyMessagesBackend(...),
+            files=MyFilesBackend(...),
         )
         
-        session = vault.create_session(user_id="user-123")
-        session.add_message("user", "Hello!")
+        conversation = vault.create_conversation(user_id="user-123")
+        conversation.add_message("user", "Hello!")
     """
     
     def __init__(
         self,
-        storage: StorageBackend,
-        persistence: PersistenceBackend,
+        messages: MessagesBackend,
+        files: FilesBackend,
     ):
         """
         Initialize ChatVault.
         
         Args:
-            storage: Backend for storing file attachments
-            persistence: Backend for storing session data
+            messages: Backend for storing conversation data
+            files: Backend for storing file attachments
         """
-        self._storage = storage
-        self._persistence = persistence
+        self._messages = messages
+        self._files = files
     
-    def create_session(self, user_id: Optional[str] = None, **metadata) -> Session:
+    def create_conversation(self, user_id: Optional[str] = None, **metadata) -> Conversation:
         """
-        Create a new conversation session.
+        Create a new conversation.
         
         Args:
-            user_id: Optional user ID to associate with the session
-            **metadata: Additional metadata to store with the session
+            user_id: Optional user ID to associate with the conversation
+            **metadata: Additional metadata to store with the conversation
             
         Returns:
-            A new Session instance
+            A new Conversation instance
         """
-        session = Session.new(user_id=user_id, metadata=metadata, _vault=self)
-        self._persistence.save_session(session)
-        return session
+        conversation = Conversation.new(user_id=user_id, metadata=metadata, _vault=self)
+        self._messages.save(conversation)
+        return conversation
     
-    def get_session(self, session_id: str) -> Optional[Session]:
+    def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
         """
-        Load an existing session by ID.
+        Load an existing conversation by ID.
         
         Args:
-            session_id: The session ID to load
+            conversation_id: The conversation ID to load
             
         Returns:
-            The Session if found, None otherwise
+            The Conversation if found, None otherwise
         """
-        session = self._persistence.get_session(session_id)
-        if session:
-            session._vault = self
-        return session
+        conversation = self._messages.get(conversation_id)
+        if conversation:
+            conversation._vault = self
+        return conversation
     
-    def get_user_sessions(self, user_id: str) -> list[Session]:
+    def get_user_conversations(self, user_id: str) -> list[Conversation]:
         """
-        Get all sessions for a user.
+        Get all conversations for a user.
         
         Args:
             user_id: The user ID to query
             
         Returns:
-            List of sessions belonging to the user
+            List of conversations belonging to the user
         """
-        sessions = self._persistence.get_user_sessions(user_id)
-        for session in sessions:
-            session._vault = self
-        return sessions
+        conversations = self._messages.get_by_user(user_id)
+        for conversation in conversations:
+            conversation._vault = self
+        return conversations
     
-    def delete_session(self, session_id: str) -> bool:
+    def delete_conversation(self, conversation_id: str) -> bool:
         """
-        Delete a session and its associated files.
+        Delete a conversation and its associated files.
         
         Args:
-            session_id: The session ID to delete
+            conversation_id: The conversation ID to delete
             
         Returns:
             True if deleted, False if not found
         """
-        session = self.get_session(session_id)
-        if not session:
+        conversation = self.get_conversation(conversation_id)
+        if not conversation:
             return False
         
         # Delete files from storage
-        for f in session.get_files():
-            self._storage.delete(f.storage_key)
+        for f in conversation.get_files():
+            self._files.delete(f.storage_key)
         
-        # Delete session from persistence
-        return self._persistence.delete_session(session_id)
+        # Delete conversation from messages backend
+        return self._messages.delete(conversation_id)
     
-    def archive_session(self, session_id: str) -> bool:
+    def archive_conversation(self, conversation_id: str) -> bool:
         """
-        Archive a session (mark as inactive).
+        Archive a conversation (mark as inactive).
         
         Args:
-            session_id: The session ID to archive
+            conversation_id: The conversation ID to archive
             
         Returns:
             True if archived, False if not found
         """
-        session = self.get_session(session_id)
-        if not session:
+        conversation = self.get_conversation(conversation_id)
+        if not conversation:
             return False
         
-        session.metadata["archived"] = True
-        self._persistence.save_session(session)
+        conversation.metadata["archived"] = True
+        self._messages.save(conversation)
         return True

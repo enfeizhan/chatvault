@@ -1,5 +1,5 @@
 """
-Local filesystem storage backend.
+Local filesystem files backend.
 
 Stores files on the local filesystem. Great for development and testing.
 """
@@ -7,17 +7,17 @@ Stores files on the local filesystem. Great for development and testing.
 import os
 from pathlib import Path
 from typing import Optional
-from chatvault.storage.base import StorageBackend
+from chatvault.backends.files.base import FilesBackend
 
 
-class LocalStorage(StorageBackend):
+class LocalFiles(FilesBackend):
     """
-    Local filesystem storage backend.
+    Local filesystem files backend.
     
     Example:
-        storage = LocalStorage(base_path="./uploads")
-        storage.put("session-123/doc.pdf", file_bytes, "application/pdf")
-        content = storage.get("session-123/doc.pdf")
+        files = LocalFiles(base_path="./uploads")
+        files.upload("conversation-123/doc.pdf", file_bytes, "application/pdf")
+        content = files.download("conversation-123/doc.pdf")
     """
     
     def __init__(self, base_path: str = "./uploads"):
@@ -34,8 +34,8 @@ class LocalStorage(StorageBackend):
         """Get full filesystem path for a key."""
         return self.base_path / key
     
-    def put(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> None:
-        """Store a file to the local filesystem."""
+    def upload(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> None:
+        """Upload a file to the local filesystem."""
         full_path = self._get_full_path(key)
         full_path.parent.mkdir(parents=True, exist_ok=True)
         full_path.write_bytes(data)
@@ -44,8 +44,8 @@ class LocalStorage(StorageBackend):
         meta_path = full_path.with_suffix(full_path.suffix + ".meta")
         meta_path.write_text(content_type)
     
-    def get(self, key: str) -> Optional[bytes]:
-        """Retrieve a file from the local filesystem."""
+    def download(self, key: str) -> Optional[bytes]:
+        """Download a file from the local filesystem."""
         full_path = self._get_full_path(key)
         if full_path.exists():
             return full_path.read_bytes()

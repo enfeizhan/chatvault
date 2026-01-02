@@ -1,14 +1,14 @@
 """
-Base class for storage backends.
+Base class for files backends.
 
-Storage backends handle file uploads, downloads, and signed URL generation.
+Files backends handle file uploads, downloads, and signed URL generation.
 """
 
 from abc import ABC, abstractmethod
 from typing import Optional
 
 
-class StorageBackend(ABC):
+class FilesBackend(ABC):
     """
     Abstract base class for file storage backends.
     
@@ -16,21 +16,21 @@ class StorageBackend(ABC):
     """
     
     @abstractmethod
-    def put(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> None:
+    def upload(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> None:
         """
-        Store a file.
+        Upload a file.
         
         Args:
-            key: Unique storage key (e.g., "session-id/filename.pdf")
+            key: Unique storage key (e.g., "conversation-id/filename.pdf")
             data: File contents as bytes
             content_type: MIME type of the file
         """
         pass
     
     @abstractmethod
-    def get(self, key: str) -> Optional[bytes]:
+    def download(self, key: str) -> Optional[bytes]:
         """
-        Retrieve a file.
+        Download a file.
         
         Args:
             key: Storage key
