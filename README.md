@@ -13,6 +13,8 @@ A lightweight Python library for managing AI chat conversations with file attach
 
 ## Installation
 
+**Requires Python 3.10+**
+
 ```bash
 pip install chatvault
 ```

@@ -2,16 +2,15 @@
 
 import pytest
 from chatvault import ChatVault, Conversation, Message
-from chatvault.storage import LocalStorage
-from chatvault.persistence import MemoryBackend
+from chatvault.backends import LocalFiles, MemoryMessages
 
 
 @pytest.fixture
 def vault(tmp_path):
     """Create a vault with temporary storage."""
     return ChatVault(
-        storage=LocalStorage(base_path=str(tmp_path / "uploads")),
-        persistence=MemoryBackend()
+        messages=MemoryMessages(),
+        files=LocalFiles(base_path=str(tmp_path / "uploads"))
     )
 
 

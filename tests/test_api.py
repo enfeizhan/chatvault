@@ -5,8 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from chatvault import ChatVault
-from chatvault.storage.local import LocalStorage
-from chatvault.persistence.memory import MemoryBackend
+from chatvault.backends import LocalFiles, MemoryMessages
 from chatvault.api import create_router
 
 
@@ -14,8 +13,8 @@ from chatvault.api import create_router
 def vault(tmp_path):
     """Create a test vault."""
     return ChatVault(
-        storage=LocalStorage(base_path=str(tmp_path)),
-        persistence=MemoryBackend()
+        messages=MemoryMessages(),
+        files=LocalFiles(base_path=str(tmp_path))
     )
 
 
@@ -54,7 +53,7 @@ def test_list_conversations(client):
     response = client.get("/api/conversations")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    assert len(data["conversations"]) == 2
 
 
 def test_rename_conversation(client):
@@ -64,7 +63,7 @@ def test_rename_conversation(client):
     conversation_id = create_resp.json()["conversation_id"]
     
     # Rename
-    response = client.patch(f("/api/conversations/{conversation_id}"), json={"title": "Renamed"})
+    response = client.patch(f"/api/conversations/{conversation_id}", json={"title": "Renamed"})
     assert response.status_code == 200
     assert response.json()["title"] == "Renamed"
 
