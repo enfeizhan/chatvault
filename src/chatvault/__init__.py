@@ -27,7 +27,6 @@ from chatvault.vault import ChatVault
 from chatvault.conversation import Conversation, Message, FileAttachment
 from chatvault.api import create_router
 
-__version__ = "0.1.0"
 __all__ = [
     "ChatVault",
     "Conversation",

@@ -10,6 +10,7 @@ A lightweight Python library for managing AI chat conversations with file attach
 - 💬 **Message History** - Store and retrieve chat messages with metadata
 - 📎 **File Attachments** - Attach files to conversations
 - 🔌 **Pluggable Backends** - Implement your own storage for any cloud provider
+- 🚀 **FastAPI Integration** - Pre-built API router for instant REST endpoints
 
 ## Installation
 
@@ -46,6 +47,58 @@ with open("document.pdf", "rb") as f:
 conversation = vault.get_conversation(conversation.conversation_id)
 ```
 
+## FastAPI Integration
+
+ChatVault includes a pre-built FastAPI router for instant REST API:
+
+```python
+from fastapi import FastAPI
+from chatvault import ChatVault
+from chatvault.api import create_router
+from chatvault.backends import MemoryMessages, LocalFiles
+
+app = FastAPI()
+
+vault = ChatVault(
+    messages=MemoryMessages(),
+    files=LocalFiles(base_path="./uploads")
+)
+
+# Add all conversation endpoints under /api
+app.include_router(create_router(vault), prefix="/api")
+```
+
+This gives you these endpoints out of the box:
+- `POST /api/conversations` - Create conversation
+- `GET /api/conversations` - List conversations
+- `GET /api/conversations/{id}` - Get conversation
+- `PATCH /api/conversations/{id}` - Rename conversation
+- `DELETE /api/conversations/{id}` - Delete conversation
+- `POST /api/conversations/{id}/messages` - Add message
+- `POST /api/conversations/{id}/files` - Upload file
+- `GET /api/conversations/{id}/files/{filename}` - Download file
+
+## API Reference
+
+### ChatVault
+
+| Method | Description |
+|--------|-------------|
+| `create_conversation(user_id=None)` | Create a new conversation |
+| `get_conversation(conversation_id)` | Load an existing conversation |
+| `get_conversations(user_id)` | List all conversations for a user |
+| `delete_conversation(conversation_id)` | Delete a conversation |
+
+### Conversation
+
+| Method | Description |
+|--------|-------------|
+| `add_message(role, content)` | Add a message to the conversation |
+| `get_messages()` | Get all messages |
+| `attach_file(filename, data, content_type)` | Attach a file |
+| `get_file(filename)` | Get file content |
+| `list_files()` | List all attached files |
+
 ## Built-in Backends
 
 | Backend | Description |
@@ -55,22 +108,18 @@ conversation = vault.get_conversation(conversation.conversation_id)
 
 ## Custom Backends
 
-ChatVault is designed to work with any storage provider. Implement the abstract base classes to create your own backends:
+ChatVault works with any storage provider. Implement these abstract base classes:
 
-- `MessagesBackend` - For conversation persistence
-- `FilesBackend` - For file storage
+- `MessagesBackend` - For conversation persistence (save, get, get_by_user, delete)
+- `FilesBackend` - For file storage (upload, download, delete, exists, get_signed_url)
 
 ### Example: AWS S3 + DynamoDB
 
-Here's how to create custom backends for AWS:
-
 ```python
 import boto3
-from chatvault.backends import FilesBackend, MessagesBackend
+from chatvault.backends import FilesBackend
 
 class S3Files(FilesBackend):
-    """Store files in AWS S3."""
-    
     def __init__(self, bucket: str, region_name: str = None):
         self.bucket = bucket
         self.s3 = boto3.client("s3", region_name=region_name)
@@ -79,11 +128,8 @@ class S3Files(FilesBackend):
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=data, ContentType=content_type)
     
     def download(self, key: str):
-        try:
-            response = self.s3.get_object(Bucket=self.bucket, Key=key)
-            return response["Body"].read()
-        except self.s3.exceptions.NoSuchKey:
-            return None
+        response = self.s3.get_object(Bucket=self.bucket, Key=key)
+        return response["Body"].read()
     
     def delete(self, key: str) -> bool:
         self.s3.delete_object(Bucket=self.bucket, Key=key)
@@ -108,8 +154,6 @@ from chatvault.backends import MessagesBackend
 from chatvault.conversation import Conversation, Message, FileAttachment
 
 class DynamoMessages(MessagesBackend):
-    """Store conversations in AWS DynamoDB."""
-    
     def __init__(self, table_name: str, region_name: str = None):
         self.table = boto3.resource("dynamodb", region_name=region_name).Table(table_name)
     
@@ -139,7 +183,6 @@ class DynamoMessages(MessagesBackend):
         )
     
     def get_by_user(self, user_id: str):
-        # Requires a GSI on user_id
         response = self.table.query(
             IndexName="user_id-index",
             KeyConditionExpression="user_id = :uid",
@@ -155,18 +198,24 @@ class DynamoMessages(MessagesBackend):
 **Usage:**
 
 ```python
-from chatvault import ChatVault
-
 vault = ChatVault(
     messages=DynamoMessages(table_name="Conversations", region_name="us-east-1"),
     files=S3Files(bucket="my-chat-files", region_name="us-east-1")
 )
-
-conversation = vault.create_conversation(user_id="user-123")
-conversation.add_message("user", "Hello!")
 ```
 
-See [docs/examples_aws.md](docs/examples_aws.md) for complete implementations.
+## Development
+
+```bash
+# Clone and install
+git clone https://github.com/enfeizhan/chatvault.git
+cd chatvault
+uv venv .venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
+
+# Run tests
+pytest -v
+```
 
 ## License
 
