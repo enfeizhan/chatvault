@@ -41,7 +41,7 @@ def test_create_conversation(client):
     response = client.post("/api/conversations", json={"title": "Test Chat"})
     assert response.status_code == 200
     data = response.json()
-    assert "session_id" in data
+    assert "conversation_id" in data
     assert data["title"] == "Test Chat"
 
 
@@ -61,10 +61,10 @@ def test_rename_conversation(client):
     """Test renaming a conversation."""
     # Create
     create_resp = client.post("/api/conversations", json={"title": "Original"})
-    session_id = create_resp.json()["session_id"]
+    conversation_id = create_resp.json()["conversation_id"]
     
     # Rename
-    response = client.patch(f"/api/conversations/{session_id}", json={"title": "Renamed"})
+    response = client.patch(f("/api/conversations/{conversation_id}"), json={"title": "Renamed"})
     assert response.status_code == 200
     assert response.json()["title"] == "Renamed"
 
@@ -73,14 +73,14 @@ def test_delete_conversation(client):
     """Test deleting a conversation."""
     # Create
     create_resp = client.post("/api/conversations", json={"title": "To Delete"})
-    session_id = create_resp.json()["session_id"]
+    conversation_id = create_resp.json()["conversation_id"]
     
     # Delete
-    response = client.delete(f"/api/conversations/{session_id}")
+    response = client.delete(f"/api/conversations/{conversation_id}")
     assert response.status_code == 200
     
     # Verify deleted
-    get_resp = client.get(f"/api/conversations/{session_id}")
+    get_resp = client.get(f"/api/conversations/{conversation_id}")
     assert get_resp.status_code == 404
 
 
@@ -88,11 +88,11 @@ def test_add_message(client):
     """Test adding a message to a conversation."""
     # Create conversation
     create_resp = client.post("/api/conversations")
-    session_id = create_resp.json()["session_id"]
+    conversation_id = create_resp.json()["conversation_id"]
     
     # Add message
     response = client.post(
-        f"/api/conversations/{session_id}/messages",
+        f"/api/conversations/{conversation_id}/messages",
         json={"role": "user", "content": "Hello!"}
     )
     assert response.status_code == 200
@@ -107,7 +107,7 @@ def test_chat_auto_create(client):
     )
     assert response.status_code == 200
     data = response.json()
-    assert "session_id" in data
+    assert "conversation_id" in data
     assert data["is_new_conversation"] == True
     assert data["message"]["content"] == "This is my first message"
     # Title should be auto-generated from content
@@ -121,13 +121,13 @@ def test_chat_existing_conversation(client):
         "/api/conversations/chat",
         data={"content": "First message"}
     )
-    session_id = first_resp.json()["session_id"]
+    conversation_id = first_resp.json()["conversation_id"]
     
     # Continue conversation
     response = client.post(
         "/api/conversations/chat",
-        data={"content": "Second message", "session_id": session_id}
+        data={"content": "Second message", "conversation_id": conversation_id}
     )
     assert response.status_code == 200
-    assert response.json()["session_id"] == session_id
+    assert response.json()["conversation_id"] == conversation_id
     assert response.json()["is_new_conversation"] == False
